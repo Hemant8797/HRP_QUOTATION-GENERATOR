@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Plus, Trash2, Printer, RotateCcw, Save, ChevronDown, MapPin, Phone, Mail, FileText, CheckCircle2, X } from 'lucide-react';
 import './styles.css';
@@ -19,6 +19,16 @@ const starterCompany = {
   pan: '',
   gstin: '10CFEPS8006P1Z7',
 };
+
+const CARRIER_PAN_STORAGE_KEY = 'hrp-logistics-carrier-pan';
+
+function getSavedCarrierPan() {
+  try {
+    return window.localStorage.getItem(CARRIER_PAN_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
 
 const initialParty = {
   serial: '3246',
@@ -80,11 +90,23 @@ function incrementSerial(serial) {
 }
 
 function App() {
-  const [company, setCompany] = useState(starterCompany);
+  const [company, setCompany] = useState(() => ({ ...starterCompany, pan: getSavedCarrierPan() }));
   const [party, setParty] = useState(initialParty);
   const [rates, setRates] = useState(defaultRates);
   const [saved, setSaved] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (company.pan.trim()) {
+        window.localStorage.setItem(CARRIER_PAN_STORAGE_KEY, company.pan.trim());
+      } else {
+        window.localStorage.removeItem(CARRIER_PAN_STORAGE_KEY);
+      }
+    } catch {
+      // The form remains usable when browser storage is unavailable.
+    }
+  }, [company.pan]);
 
   const updateParty = key => value => setParty(current => ({ ...current, [key]: value }));
   const updateCompany = key => value => setCompany(current => ({ ...current, [key]: value }));
