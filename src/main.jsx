@@ -46,6 +46,17 @@ function Editable({ label, value, onChange, wide = false, hint }) {
   </label>;
 }
 
+function incrementSerial(serial) {
+  const value = String(serial ?? '').trim();
+  const match = value.match(/^(.*?)(\d+)$/);
+
+  if (!match) return value;
+
+  const [, prefix, numericPart] = match;
+  const incremented = String(Number(numericPart) + 1);
+  return `${prefix}${incremented.padStart(numericPart.length, '0')}`;
+}
+
 function App() {
   const [company, setCompany] = useState(starterCompany);
   const [party, setParty] = useState(initialParty);
@@ -56,7 +67,12 @@ function App() {
   const updateParty = key => value => setParty(current => ({ ...current, [key]: value }));
   const updateCompany = key => value => setCompany(current => ({ ...current, [key]: value }));
   const updateRate = (rowIndex, columnIndex, value) => setRates(current => current.map((row, i) => i === rowIndex ? row.map((cell, j) => j === columnIndex ? value : cell) : row));
-  const resetForm = () => { setCompany(starterCompany); setParty(initialParty); setRates(defaultRates); setSaved(false); };
+  const resetForm = () => {
+    setCompany(current => ({ ...starterCompany, pan: current.pan }));
+    setParty(current => ({ ...initialParty, serial: incrementSerial(current.serial) }));
+    setRates(defaultRates);
+    setSaved(false);
+  };
   const addRate = () => setRates(current => [...current, ['', '', '0.00', '0.00', '0.00', '0.00', '0.00']]);
   const removeRate = index => setRates(current => current.filter((_, i) => i !== index));
   const issueDate = useMemo(() => new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date()), []);
