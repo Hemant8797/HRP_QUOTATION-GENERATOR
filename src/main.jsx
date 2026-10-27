@@ -31,6 +31,7 @@ const initialParty = {
   goods: 'Pesticide',
   billingType: 'T',
   bilty: '30.00',
+  minimumCharge: '0.00',
   fov: '0.00',
   afterRs: '0.00',
   rrc: '0.00',
@@ -49,6 +50,7 @@ const clearedParty = {
   goods: '',
   billingType: '',
   bilty: '',
+  minimumCharge: '',
   fov: '',
   afterRs: '',
   rrc: '',
@@ -148,7 +150,7 @@ function App() {
         <div className="form-card charges-card">
           <div className="card-title"><div className="icon-wrap coral">₹</div><div><h2>Additional charges</h2><p>Set the standard charges that apply to this party.</p></div></div>
           <div className="charges-grid">
-            {[['Bilty charge','bilty'], ['F.O.V.','fov'], ['After R.S.','afterRs'], ['R.R.C.','rrc'], ['Hamali','hamali'], ['Surcharge','surcharge'], ['CC / door delivery','ccDoor']].map(([label, key]) => <Editable key={key} label={label} value={party[key]} onChange={updateParty(key)} />)}
+            {[['Bilty charge','bilty'], ['Minimum charge','minimumCharge'], ['F.O.V.','fov'], ['After R.S.','afterRs'], ['R.R.C.','rrc'], ['Hamali','hamali'], ['Surcharge','surcharge'], ['CC / door delivery','ccDoor']].map(([label, key]) => <Editable key={key} label={label} value={party[key]} onChange={updateParty(key)} />)}
           </div>
         </div>
 
@@ -170,7 +172,7 @@ function App() {
 }
 
 function Quotation({ company, party, rates, issueDate }) {
-  const charges = [['Bilty Charge', party.bilty], ['F.O.V.', party.fov], ['After R.S.', party.afterRs], ['R.R.C.', party.rrc], ['Hamali', party.hamali], ['Surcharge', party.surcharge], ['CC / Door Del.', party.ccDoor]];
+  const charges = [['Bilty Charge', party.bilty], ['Minimum Charge', party.minimumCharge], ['F.O.V.', party.fov], ['After R.S.', party.afterRs], ['R.R.C.', party.rrc], ['Hamali', party.hamali], ['Surcharge', party.surcharge], ['CC / Door Del.', party.ccDoor]];
   return <article className="quotation">
     <div className="quote-rule"></div>
     <div className="quote-kicker">PARTY RATE LIST</div>
