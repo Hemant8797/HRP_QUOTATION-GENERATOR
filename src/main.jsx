@@ -39,6 +39,26 @@ const initialParty = {
   ccDoor: '0.00',
 };
 
+const clearedParty = {
+  name: '',
+  address: '',
+  city: '',
+  email: '',
+  phone: '',
+  tin: '',
+  goods: '',
+  billingType: '',
+  bilty: '',
+  fov: '',
+  afterRs: '',
+  rrc: '',
+  hamali: '',
+  surcharge: '',
+  ccDoor: '',
+};
+
+const clearedRates = defaultRates.map(([station]) => [station, '', '', '', '', '', '']);
+
 function Editable({ label, value, onChange, wide = false, hint }) {
   return <label className={`field ${wide ? 'wide' : ''}`}>
     <span>{label}</span>
@@ -69,8 +89,8 @@ function App() {
   const updateRate = (rowIndex, columnIndex, value) => setRates(current => current.map((row, i) => i === rowIndex ? row.map((cell, j) => j === columnIndex ? value : cell) : row));
   const resetForm = () => {
     setCompany(current => ({ ...starterCompany, pan: current.pan }));
-    setParty(current => ({ ...initialParty, serial: incrementSerial(current.serial) }));
-    setRates(defaultRates);
+    setParty(current => ({ ...clearedParty, serial: incrementSerial(current.serial) }));
+    setRates(clearedRates);
     setSaved(false);
   };
   const addRate = () => setRates(current => [...current, ['', '', '0.00', '0.00', '0.00', '0.00', '0.00']]);
@@ -121,7 +141,7 @@ function App() {
             <Editable label="Phone" value={party.phone} onChange={updateParty('phone')} />
             <Editable label="GSTIN / TIN" value={party.tin} onChange={updateParty('tin')} />
             <Editable label="Goods / item" value={party.goods} onChange={updateParty('goods')} />
-            <label className="field"><span>Billing type</span><div className="select-wrap"><select value={party.billingType} onChange={e => updateParty('billingType')(e.target.value)}><option>T — Transport</option><option>F — Freight</option><option>D — Door delivery</option></select><ChevronDown size={16} /></div></label>
+            <label className="field"><span>Billing type</span><div className="select-wrap"><select value={party.billingType} onChange={e => updateParty('billingType')(e.target.value)}><option value="">Select billing type</option><option value="T">T — Transport</option><option value="F">F — Freight</option><option value="D">D — Door delivery</option></select><ChevronDown size={16} /></div></label>
           </div>
         </div>
 
