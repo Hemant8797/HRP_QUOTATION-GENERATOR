@@ -12,7 +12,7 @@ const port = Number(process.env.PORT || 4000);
 const distDirectory = fileURLToPath(new URL('../dist', import.meta.url));
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
   .split(',')
-  .map(origin => origin.trim())
+  .map(origin => origin.trim().replace(/\/+$/, ''))
   .filter(Boolean);
 
 // Unlisted origins simply get no CORS headers (the browser then blocks them); same-origin requests are unaffected.
