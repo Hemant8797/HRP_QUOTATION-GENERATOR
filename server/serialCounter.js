@@ -29,13 +29,14 @@ export async function getNextSerial() {
   return String(await ensureCounter());
 }
 
-// Moves the counter one past the larger of its current value and the serial being replaced.
+// Moves the counter past the serial the form was showing. Saving already moves it past a saved
+// serial, so resetting after a save does not skip a number.
 export async function advanceSerial(fromSerial) {
   await ensureCounter();
-  const from = toSerialNumber(fromSerial) ?? 0;
+  const from = toSerialNumber(fromSerial);
   const counter = await Counter.findOneAndUpdate(
     { _id: COUNTER_ID },
-    [{ $set: { value: { $max: [{ $add: ['$value', 1] }, from + 1] } } }],
+    from === null ? { $inc: { value: 1 } } : { $max: { value: from + 1 } },
     { new: true },
   ).lean();
   return String(counter.value);

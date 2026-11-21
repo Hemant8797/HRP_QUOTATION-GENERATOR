@@ -1,7 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Trash2, Printer, RotateCcw, Save, ChevronDown, MapPin, FileText, CheckCircle2, X, Eye } from 'lucide-react';
 import { apiRequest } from './api.js';
-import { navigate } from './router.js';
 import { Quotation, formatDate } from './Quotation.jsx';
 import { Topbar } from './Topbar.jsx';
 
@@ -77,6 +76,28 @@ export function QuotationEditor({ route, quotationId, notify }) {
   const [loadState, setLoadState] = useState(isEditing ? 'loading' : 'ready');
   const [showPreview, setShowPreview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [savedId, setSavedId] = useState(quotationId || null);
+  const [savedSnapshot, setSavedSnapshot] = useState(null);
+  const pendingSave = useRef(null);
+  const saved = useRef({ id: quotationId || null, snapshot: null });
+  const latest = useRef(null);
+
+  // Only Print and Save store a quotation. "Unsaved" means edited since the last save, or since the blank form.
+  const snapshot = JSON.stringify({ company, party, rates });
+  const blankSnapshot = JSON.stringify({ company: { ...starterCompany, pan: company.pan }, party: { ...clearedParty, serial: party.serial }, rates: clearedRates });
+  const hasUnsavedChanges = snapshot !== (savedSnapshot ?? blankSnapshot);
+  // Saves finish after later renders, so they read the newest form state from here rather than a stale closure.
+  latest.current = { company, party, rates, snapshot };
+
+  function confirmDiscard() {
+    return !hasUnsavedChanges || window.confirm('This quotation has unsaved changes. Discard them?');
+  }
+
+  function markSaved(id, savedState) {
+    saved.current = { id, snapshot: savedState };
+    setSavedId(id);
+    setSavedSnapshot(savedState);
+  }
 
   useEffect(() => {
     try {
@@ -94,6 +115,32 @@ export function QuotationEditor({ route, quotationId, notify }) {
     if (isEditing) void loadQuotation();
     else void loadNextSerial();
   }, [quotationId]);
+
+  useEffect(() => {
+    const onLinkClick = event => {
+      const link = event.target.closest?.('a[href^="#/"]');
+      if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
+      const target = link.getAttribute('href').slice(1);
+
+      // "New quotation" while already on the new-quotation page would not change the URL, so start the next one here.
+      if (target === '/new' && !isEditing) {
+        event.preventDefault();
+        if (savedId || hasUnsavedChanges) void resetForm();
+        return;
+      }
+      if (!confirmDiscard()) event.preventDefault();
+    };
+    const onBeforeUnload = event => {
+      if (hasUnsavedChanges) event.preventDefault();
+    };
+
+    document.addEventListener('click', onLinkClick, true);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      document.removeEventListener('click', onLinkClick, true);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+    };
+  }, [snapshot, savedId, hasUnsavedChanges, isEditing]);
 
   const updateParty = key => value => setParty(current => ({ ...current, [key]: value }));
   const updateCompany = key => value => setCompany(current => ({ ...current, [key]: value }));
@@ -114,13 +161,17 @@ export function QuotationEditor({ route, quotationId, notify }) {
   }
 
   async function resetForm() {
-    const localSerial = incrementSerial(party.serial || FIRST_SERIAL);
+    if (!confirmDiscard()) return;
+
+    const previousSerial = party.serial;
+    const localSerial = incrementSerial(previousSerial || FIRST_SERIAL);
     setCompany(current => ({ ...starterCompany, pan: current.pan }));
     setParty({ ...clearedParty, serial: localSerial });
     setRates(clearedRates);
+    markSaved(null, null);
 
     try {
-      const { serialNumber } = await apiRequest('/quotations/next-serial/advance', { method: 'POST', body: JSON.stringify({ from: party.serial }) });
+      const { serialNumber } = await apiRequest('/quotations/next-serial/advance', { method: 'POST', body: JSON.stringify({ from: previousSerial }) });
       setParty(current => current.serial === localSerial ? { ...current, serial: serialNumber } : current);
     } catch {
       // Keep the locally incremented number if the counter could not be updated.
@@ -130,9 +181,15 @@ export function QuotationEditor({ route, quotationId, notify }) {
   async function loadQuotation() {
     try {
       const quotation = await apiRequest(`/quotations/${quotationId}`);
-      setCompany({ ...starterCompany, ...quotation.company, pan: quotation.company.pan || getSavedCarrierPan() });
-      setParty({ ...clearedParty, ...quotation.party, serial: quotation.serialNumber });
-      setRates(quotation.rates);
+      const loaded = {
+        company: { ...starterCompany, ...quotation.company, pan: quotation.company.pan || getSavedCarrierPan() },
+        party: { ...clearedParty, ...quotation.party, serial: quotation.serialNumber },
+        rates: quotation.rates,
+      };
+      setCompany(loaded.company);
+      setParty(loaded.party);
+      setRates(loaded.rates);
+      markSaved(quotationId, JSON.stringify(loaded));
       setCreatedAt(quotation.createdAt);
       setLoadState('ready');
     } catch (error) {
@@ -141,28 +198,48 @@ export function QuotationEditor({ route, quotationId, notify }) {
     }
   }
 
+  // Resolves to true once the form, as it is when this save starts, is stored. Saves run one at a time,
+  // so a new quotation is never created twice and an edit made during a save is saved by the next one.
   async function saveQuotation() {
-    try {
-      setIsSaving(true);
-      const payload = { serialNumber: party.serial, company, party, rates };
-      const savedQuotation = await apiRequest(isEditing ? `/quotations/${quotationId}` : '/quotations', {
-        method: isEditing ? 'PUT' : 'POST',
-        body: JSON.stringify(payload),
-      });
+    while (pendingSave.current) await pendingSave.current;
 
-      notify(isEditing ? 'Quotation changes saved' : 'Quotation saved to database');
-      if (!isEditing) navigate(`/quotations/${savedQuotation.id}/edit`, { replace: true });
-    } catch (error) {
-      notify(error.message, 'error');
+    const { company, party, rates, snapshot } = latest.current;
+    if (saved.current.id && snapshot === saved.current.snapshot) return true;
+
+    const request = (async () => {
+      const id = saved.current.id;
+      setIsSaving(true);
+      try {
+        const savedQuotation = await apiRequest(id ? `/quotations/${id}` : '/quotations', {
+          method: id ? 'PUT' : 'POST',
+          body: JSON.stringify({ serialNumber: party.serial, company, party, rates }),
+        });
+        markSaved(savedQuotation.id, snapshot);
+        notify(id ? 'Quotation changes saved' : `Quotation no. ${savedQuotation.serialNumber} saved`);
+        return true;
+      } catch (error) {
+        notify(error.message, 'error');
+        return false;
+      } finally {
+        setIsSaving(false);
+      }
+    })();
+    pendingSave.current = request;
+    try {
+      return await request;
     } finally {
-      setIsSaving(false);
+      if (pendingSave.current === request) pendingSave.current = null;
     }
   }
 
-  function printQuotation() {
+  async function printQuotation() {
+    // Printing still goes ahead if the save fails; the error toast tells the user.
+    if (hasUnsavedChanges) await saveQuotation();
     setShowPreview(true);
     setTimeout(() => window.print(), 250);
   }
+
+  const saveStatus = isSaving ? 'Saving…' : hasUnsavedChanges ? 'Unsaved changes' : savedId ? `Saved · no. ${party.serial}` : 'New quotation';
 
   if (loadState !== 'ready') {
     return <>
@@ -177,11 +254,11 @@ export function QuotationEditor({ route, quotationId, notify }) {
 
   return <>
     <Topbar route={route}>
-      <span className="autosave"><CheckCircle2 size={15} /> {isEditing ? `Editing no. ${party.serial}` : 'New quotation'}</span>
+      <span className="autosave"><CheckCircle2 size={15} /> {saveStatus}</span>
       {isEditing
         ? <a className="button ghost" href={`#/quotations/${quotationId}`}><Eye size={16} /> View</a>
         : <button className="button ghost" onClick={resetForm}><RotateCcw size={16} /> Reset</button>}
-      <button className="button secondary" onClick={saveQuotation} disabled={isSaving}><Save size={16} /> {isSaving ? 'Saving…' : isEditing ? 'Save changes' : 'Save quotation'}</button>
+      <button className="button secondary" onClick={() => void saveQuotation()} disabled={isSaving}><Save size={16} /> {isSaving ? 'Saving…' : savedId ? 'Save changes' : 'Save quotation'}</button>
       <button className="button primary editor-print" onClick={printQuotation}><Printer size={16} /> Print quotation</button>
     </Topbar>
 
